@@ -4,7 +4,7 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { PWA_BOOTSTRAP } from "@/lib/pwa-bootstrap";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "英会話アプリ";
+const APP_NAME = "Conversation";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "英会話アプリ。会話、画像の読み取り、好きな形式への整形。",
+        content: "Conversation. Talk, read images, and format study notes.",
       },
       { name: "theme-color", content: "#e4d7c3" },
       { name: "mobile-web-app-capable", content: "yes" },
@@ -25,8 +25,8 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png" },
+      { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png" },
       { rel: "manifest", href: "/manifest.json" },
-      { rel: "prefetch", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", sizes: "180x180", href: "/icon-180.png" },
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -40,7 +40,7 @@ export const Route = createRootRoute({
   component: () => (
     <html lang="ja" className="antialiased" suppressHydrationWarning>
       <head>
-        <link rel="prefetch" href="/__grok/manifest.webmanifest" />
+        <meta name="eikaiwa-pwa" content='href="/__grok/manifest.webmanifest"' />
         <link rel="manifest" href="/manifest.json" />
         <script dangerouslySetInnerHTML={{ __html: PWA_BOOTSTRAP }} />
         <HeadContent />

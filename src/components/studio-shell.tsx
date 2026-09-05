@@ -14,13 +14,8 @@ import { getAiStatus } from "@/lib/ai";
 import { imageFilesFromClipboard } from "@/lib/clipboard";
 import { VOICES } from "@/lib/formats";
 import { compressImage } from "@/lib/media";
-import { type Mode, rehydrateFolio, useFolio } from "@/lib/store";
-
-const MODE_OPTIONS: { id: Mode; label: string }[] = [
-  { id: "speak", label: "会話する" },
-  { id: "scan", label: "画像を読む" },
-  { id: "format", label: "テキストを整形" },
-];
+import { rehydrateFolio, useFolio } from "@/lib/store";
+import { LOCALES, LOCALE_META, detectLocale, t } from "@/lib/i18n";
 
 export function StudioShell() {
   const {
@@ -34,13 +29,31 @@ export function StudioShell() {
     setAutoPlay,
     ttsSpeed,
     setTtsSpeed,
-    setPendingImage,
+    setPendingImages,
+    locale,
+    setLocale,
+    scanBusy,
+    scanProgress,
   } = useFolio();
   const [aiOff, setAiOff] = useState(false);
 
   useEffect(() => {
     rehydrateFolio();
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = locale;
+    document.documentElement.dir = LOCALE_META[locale].dir;
+  }, [locale]);
+
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("folio-en")) setLocale(detectLocale());
+    } catch {
+      /* ignore */
+    }
+  }, [setLocale]);
 
   useEffect(() => {
     let alive = true;
@@ -53,22 +66,24 @@ export function StudioShell() {
   }, []);
 
   useEffect(() => {
-    async function takeFile(file: File) {
+    async function takeFiles(files: File[]) {
+      const images = files.filter((f) => f.type.startsWith("image/")).slice(0, 8);
+      if (!images.length) return;
       try {
-        const dataUrl = await compressImage(file);
-        setPendingImage(dataUrl);
+        const urls = await Promise.all(images.map((file) => compressImage(file)));
+        setPendingImages(urls);
         setMode("scan");
-        toast.success("画像を受け取りました");
+        toast.success(urls.length > 1 ? t(locale, "toastGotMany", { n: urls.length }) : t(locale, "toastGotOne"));
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "画像の読み込みに失敗しました");
+        toast.error(err instanceof Error ? err.message : t(locale, "toastImageFail"));
       }
     }
 
     const onPaste = (e: ClipboardEvent) => {
-      const file = imageFilesFromClipboard(e.clipboardData)[0];
-      if (!file) return;
+      const files = imageFilesFromClipboard(e.clipboardData);
+      if (!files.length) return;
       e.preventDefault();
-      void takeFile(file);
+      void takeFiles(files);
     };
 
     const onDragOver = (e: DragEvent) => {
@@ -76,10 +91,10 @@ export function StudioShell() {
     };
 
     const onDrop = (e: DragEvent) => {
-      const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith("image/"));
-      if (!file) return;
+      const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
       e.preventDefault();
-      void takeFile(file);
+      void takeFiles(files);
     };
 
     window.addEventListener("paste", onPaste);
@@ -90,7 +105,7 @@ export function StudioShell() {
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("drop", onDrop);
     };
-  }, [setMode, setPendingImage]);
+  }, [setMode, setPendingImages, locale]);
 
   return (
     <div className="flex min-h-dvh flex-col pb-[env(safe-area-inset-bottom)]">
@@ -102,16 +117,18 @@ export function StudioShell() {
         }}
       />
       <header className="sticky top-0 z-20 bg-paper paper-grain pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3 sm:px-6">
-          <FolioMark className="size-9 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-lg leading-none tracking-tight sm:text-xl">英会話アプリ</p>
-            <p className="mt-1 hidden text-[11px] tracking-wide text-muted-foreground sm:block">
-              紙の上で、英語を書く。
+        <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
+          <FolioMark className="size-8 shrink-0 sm:size-9" />
+          <div className="min-w-0 flex-1 overflow-hidden pr-2">
+            <p className="truncate font-display text-base leading-none tracking-tight sm:text-xl">
+              {t(locale, "appName")}
+            </p>
+            <p className="mt-1 hidden truncate text-[11px] tracking-wide text-muted-foreground sm:block">
+              {t(locale, "appTagline")}
             </p>
           </div>
           <AuthSlot />
-          <div className="w-[9.75rem] shrink-0 sm:w-[13.5rem]">
+          <div className="hidden w-[13.5rem] shrink-0 sm:block">
             <LevelBar value={level} onChange={setLevel} compact name="folio-level-header" />
           </div>
         </div>
@@ -121,7 +138,7 @@ export function StudioShell() {
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-5 sm:px-6 sm:py-7">
         {aiOff ? (
           <p className="mb-4 rounded-md bg-memo px-4 py-3 text-sm paper-shadow">
-            AI機能はこの環境では利用できません。
+            {t(locale, "aiOff")}
           </p>
         ) : null}
 
@@ -130,15 +147,19 @@ export function StudioShell() {
         <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <NativeSelect
             id="folio-mode"
-            label="いまやることを選ぶ"
+            label={t(locale, "chooseTask")}
             size="lg"
             value={mode}
             onChange={setMode}
-            options={MODE_OPTIONS}
+            options={[
+              { id: "speak", label: t(locale, "modeSpeak") },
+              { id: "scan", label: t(locale, "modeScan") },
+              { id: "format", label: t(locale, "modeFormat") },
+            ]}
           />
           <details className="paper-sheet px-3 py-2 sm:min-w-52">
             <summary className="flex h-8 cursor-pointer list-none items-center text-sm font-medium select-none [&::-webkit-details-marker]:hidden">
-              設定
+              {t(locale, "settings")}
             </summary>
             <div className="mt-3 grid gap-4 pb-1">
               <div className="sm:hidden">
@@ -146,17 +167,24 @@ export function StudioShell() {
               </div>
               <NativeSelect
                 id="folio-voice"
-                label="声"
+                label={t(locale, "voice")}
                 value={voiceId}
                 onChange={setVoiceId}
                 options={[
-                  { id: "device", label: "端末の声 · 使うほど精度が上がる" },
+                  { id: "device", label: t(locale, "voiceDevice") },
                   ...VOICES.map((v) => ({ id: v.id, label: `Grok · ${v.label} · ${v.blurb}` })),
                 ]}
               />
+              <NativeSelect
+                id="folio-lang"
+                label={t(locale, "language")}
+                value={locale}
+                onChange={(id) => setLocale(id)}
+                options={LOCALES.map((id) => ({ id, label: LOCALE_META[id].label }))}
+              />
               <div>
                 <Label className="mb-2 block" htmlFor="speed">
-                  読み上げ速度 {ttsSpeed.toFixed(2)}
+                  {t(locale, "speed")} {ttsSpeed.toFixed(2)}
                 </Label>
                 <input
                   id="speed"
@@ -176,13 +204,23 @@ export function StudioShell() {
                   onChange={(e) => setAutoPlay(e.target.checked)}
                   className="size-4 accent-primary"
                 />
-                返答を自動再生
+                {t(locale, "autoPlay")}
               </label>
             </div>
           </details>
         </div>
 
         <HistorySync />
+
+        {scanBusy && mode !== "scan" && scanProgress ? (
+          <button
+            type="button"
+            onClick={() => setMode("scan")}
+            className="mb-4 w-full rounded-md bg-memo px-4 py-3 text-left text-sm paper-shadow"
+          >
+            {t(locale, "scanBg", { done: scanProgress.done, total: scanProgress.total })}
+          </button>
+        ) : null}
 
         {mode === "speak" ? <SpeakStudio /> : null}
         {mode === "scan" ? <ScanStudio /> : null}

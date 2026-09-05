@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { Loader2, RefreshCw, Volume2 } from "lucide-react";
 import { toast } from "sonner";
-import { CopyButton } from "@/components/copy-button";
+import { CopyButton, TapToCopy } from "@/components/copy-button";
 import { FileField } from "@/components/file-field";
 import { FormatPicker } from "@/components/format-picker";
 import { PaperSheet } from "@/components/paper-sheet";
 import { StudyMarkdown } from "@/components/study-markdown";
 import { AnkiCards } from "@/components/anki-cards";
 import { ExportBar } from "@/components/export-bar";
-import { imageFilesFromClipboard } from "@/lib/clipboard";
-import { readImage } from "@/lib/ai";
 import { compressImage } from "@/lib/media";
+import { startScanJob } from "@/lib/scan-job";
 import { speakText, unlockSpeak } from "@/lib/speech";
 import { useFolio } from "@/lib/store";
+import { t } from "@/lib/i18n";
+
+const MAX_IMAGES = 8;
 
 export function ScanStudio() {
   const {
@@ -26,71 +28,49 @@ export function ScanStudio() {
     voiceId,
     ttsSpeed,
     ttsEngine,
-    pendingImage,
-    setPendingImage,
+    pendingImages,
+    setPendingImages,
+    scanPreviews,
+    setScanPreviews,
+    scanBusy,
+    scanProgress,
+    locale,
   } = useFolio();
 
-  const [preview, setPreview] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [pasteHint, setPasteHint] = useState("");
+  const previews = scanPreviews;
+  const busy = scanBusy;
+  const progress = scanProgress;
 
-  const analyze = useCallback(
-    async (dataUrl: string) => {
-      setBusy(true);
-      try {
-        const res = await readImage({
-          data: {
-            imageDataUrl: dataUrl,
-            level,
-            formatId,
-            customFormat,
-          },
-        });
-        if (!res.ok) {
-          toast.error(res.error);
-          return;
-        }
-        setLastScan({
-          extracted: res.extracted,
-          translationJa: res.translationJa,
-          formatted: res.formatted,
-          notesJa: res.notesJa,
-          formatId,
-          cards: res.cards ?? [],
-        });
-      } catch {
-        toast.error("画像を読めませんでした");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [customFormat, formatId, level, setLastScan],
-  );
-
-  const ingest = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith("image/")) {
-        toast.error("画像ファイルを選んでください");
+  const ingestFiles = useCallback(
+    async (files: File[], mode: "replace" | "append") => {
+      const images = files.filter((f) => f.type.startsWith("image/") || !f.type);
+      if (!images.length) {
+        toast.error(t(locale, "toastNeedImage"));
         return;
       }
       try {
-        const dataUrl = await compressImage(file);
-        setPreview(dataUrl);
-        await analyze(dataUrl);
+        const urls = await Promise.all(images.map((file) => compressImage(file)));
+        const next =
+          mode === "append" ? [...previews, ...urls].slice(0, MAX_IMAGES) : urls.slice(0, MAX_IMAGES);
+        if (mode === "append" && previews.length + urls.length > MAX_IMAGES) {
+          toast.error(t(locale, "toastMax"));
+        }
+        setScanPreviews(next);
+        startScanJob(next);
       } catch {
-        toast.error("画像の読み込みに失敗しました");
+        toast.error(t(locale, "toastImageFail"));
       }
     },
-    [analyze],
+    [previews, locale, setScanPreviews],
   );
 
   useEffect(() => {
-    if (!pendingImage) return;
-    setPreview(pendingImage);
-    const dataUrl = pendingImage;
-    setPendingImage(null);
-    void analyze(dataUrl);
-  }, [pendingImage, analyze, setPendingImage]);
+    if (!pendingImages.length) return;
+    const urls = pendingImages.slice(0, MAX_IMAGES);
+    setPendingImages([]);
+    setScanPreviews(urls);
+    startScanJob(urls);
+  }, [pendingImages, setPendingImages, setScanPreviews]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -102,85 +82,82 @@ export function ScanStudio() {
       />
 
       <PaperSheet className="p-4 sm:p-5">
-        {preview ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            <img
-              src={preview}
-              alt="読み取った画像"
-              className="max-h-48 w-full rounded-sm object-contain outline outline-1 -outline-offset-1 outline-foreground/15 sm:max-h-56 sm:w-48"
-            />
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <p className="text-sm text-muted-foreground">
-                教科書・看板・メモの写真を自動で読み、指定した形式に整えます。
-              </p>
+        {previews.length ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {previews.map((src, i) =>
+                src.startsWith("data:image/") ? (
+                <img
+                  key={`${src.slice(-24)}-${i}`}
+                  src={src}
+                  alt=""
+                  className="h-28 w-28 shrink-0 rounded-sm object-cover outline outline-1 -outline-offset-1 outline-foreground/15"
+                />
+                ) : null,
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t(locale, "scanCount", { n: previews.length })}
+            </p>
+            <p className="text-xs text-muted-foreground">{t(locale, "scanMax")}</p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <FileField
+                id="scan-add"
+                label={t(locale, "scanAdd")}
+                accept="image/*"
+                multiple
+                disabled={busy || previews.length >= MAX_IMAGES}
+                onFiles={(files) => void ingestFiles(files, "append")}
+              />
               <FileField
                 id="scan-replace"
-                label="別の画像"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                label={t(locale, "scanReplace")}
+                accept="image/*"
+                multiple
                 disabled={busy}
-                onFile={(file) => void ingest(file)}
+                onFiles={(files) => void ingestFiles(files, "replace")}
               />
-              {preview ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void analyze(preview);
-                  }}
-                >
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className="inline-flex h-11 cursor-pointer touch-manipulation items-center gap-2 rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground disabled:opacity-45"
-                  >
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                    同じ画像で再生成
-                  </button>
-                </form>
-              ) : null}
             </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                startScanJob(previews);
+              }}
+            >
+              <button
+                type="submit"
+                disabled={busy}
+                className="inline-flex h-11 cursor-pointer touch-manipulation items-center gap-2 rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground disabled:opacity-45"
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                {busy && progress
+                  ? t(locale, "scanReading", { done: progress.done, total: progress.total })
+                  : t(locale, "scanRerun")}
+              </button>
+            </form>
           </div>
         ) : (
           <div className="flex flex-col items-stretch gap-4 py-2 sm:py-4">
             <p className="text-xs font-medium tracking-wide text-muted-foreground">Scan</p>
-            <h2 className="font-display text-3xl leading-tight">写真を置くと、英語になる。</h2>
+            <h2 className="font-display text-3xl leading-tight">{t(locale, "scanTitle")}</h2>
             <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
-              画像をコピーして下の欄に貼るか、ファイルを選んでください。選んだ瞬間に読み取ります。
+              {t(locale, "scanLead")}
             </p>
-            <label className="flex flex-col gap-1" htmlFor="scan-paste">
-              <span className="text-xs font-medium text-muted-foreground">
-                画像をここに貼り付け
-              </span>
-              <input
-                id="scan-paste"
-                type="text"
-                enterKeyHint="go"
-                autoComplete="off"
-                value={pasteHint}
-                onChange={(e) => setPasteHint(e.target.value)}
-                onPaste={(e) => {
-                  const file = imageFilesFromClipboard(e.clipboardData)[0];
-                  if (!file) return;
-                  e.preventDefault();
-                  setPasteHint("");
-                  void ingest(file);
-                }}
-                placeholder="この欄をタップ → 長押しで貼り付け"
-                className="field h-12 px-3.5 text-base"
-              />
-            </label>
+            <p className="text-xs font-medium text-muted-foreground">{t(locale, "scanMax")}</p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <FileField
                 id="scan-file"
-                label="写真を選ぶ"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onFile={(file) => void ingest(file)}
+                label={t(locale, "scanPick")}
+                accept="image/*"
+                multiple
+                onFiles={(files) => void ingestFiles(files, "replace")}
               />
               <FileField
                 id="scan-camera"
-                label="カメラで撮る"
+                label={t(locale, "scanCamera")}
                 accept="image/*"
                 capture="environment"
-                onFile={(file) => void ingest(file)}
+                onFile={(file) => void ingestFiles([file], "replace")}
               />
             </div>
           </div>
@@ -189,6 +166,9 @@ export function ScanStudio() {
 
       {busy ? (
         <div className="space-y-3 paper-sheet p-5">
+          <p className="text-sm text-muted-foreground">
+            {progress ? t(locale, "scanReading", { done: progress.done, total: progress.total }) : t(locale, "scanBusy")}
+          </p>
           <div className="h-4 w-40 rounded-sm folio-shimmer" />
           <div className="h-3 w-full rounded-sm folio-shimmer" />
           <div className="h-3 w-5/6 rounded-sm folio-shimmer" />
@@ -198,8 +178,8 @@ export function ScanStudio() {
         <div className="grid min-w-0 gap-4 lg:grid-cols-2">
           <section className="min-w-0 overflow-hidden paper-sheet p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-medium tracking-wide text-muted-foreground">読み取り</h3>
-              <div className="flex">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground">{t(locale, "scanExtracted")}</h3>
+              <div className="flex flex-wrap">
                 {lastScan.extracted ? (
                   <form
                     onSubmit={async (e) => {
@@ -222,29 +202,41 @@ export function ScanStudio() {
                       className="inline-flex h-11 cursor-pointer touch-manipulation items-center gap-1 rounded-md px-3 text-sm"
                     >
                       <Volume2 className="size-4" />
-                      聞く
+                      {t(locale, "listen")}
                     </button>
                   </form>
                 ) : null}
-                <CopyButton text={lastScan.extracted} />
+                {lastScan.extracted ? (
+                  <CopyButton text={lastScan.extracted} label={t(locale, "copyEn")} />
+                ) : null}
+                {lastScan.extracted || lastScan.translationJa ? (
+                  <CopyButton
+                    text={[lastScan.extracted, lastScan.translationJa].filter(Boolean).join("\n\n")}
+                    label={t(locale, "copyAll")}
+                  />
+                ) : null}
               </div>
             </div>
             {lastScan.extracted ? (
-              <p className="whitespace-pre-wrap font-display text-[1.02rem] leading-relaxed">
-                {lastScan.extracted}
-              </p>
+              <TapToCopy text={lastScan.extracted}>
+                <p className="whitespace-pre-wrap font-display text-[1.02rem] leading-relaxed">
+                  {lastScan.extracted}
+                </p>
+              </TapToCopy>
             ) : (
-              <p className="text-sm text-muted-foreground">英文の抽出はありませんでした。</p>
+              <p className="text-sm text-muted-foreground">{t(locale, "scanNone")}</p>
             )}
             {lastScan.translationJa ? (
-              <p className="mt-4 border-t border-border pt-4 text-sm leading-relaxed text-muted-foreground">
-                {lastScan.translationJa}
-              </p>
+              <TapToCopy text={lastScan.translationJa}>
+                <p className="mt-4 border-t border-border pt-4 text-sm leading-relaxed text-muted-foreground">
+                  {lastScan.translationJa}
+                </p>
+              </TapToCopy>
             ) : null}
           </section>
           <section className="min-w-0 overflow-hidden paper-sheet p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-medium tracking-wide text-muted-foreground">指定フォーマット</h3>
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground">{t(locale, "scanFormatted")}</h3>
               <CopyButton text={lastScan.formatted} />
             </div>
             <div className="flex min-w-0 flex-col gap-4">

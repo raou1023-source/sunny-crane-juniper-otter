@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
-import { type AnkiCard } from "@/lib/anki";
+import { parseCards, type AnkiCard } from "@/lib/anki";
 import { characterById, type CharacterId, type DrillId } from "@/lib/characters";
 import {
   type FormatId,
@@ -8,6 +8,8 @@ import {
   type ScenarioId,
   SCENARIOS,
 } from "@/lib/formats";
+import { isLocale, type Locale } from "@/lib/i18n";
+import { onlySafeImageUrls } from "@/lib/safe-image";
 import { uid } from "@/lib/utils";
 
 export type Mode = "speak" | "scan" | "format";
@@ -74,9 +76,13 @@ type FolioState = {
   speakTurns: SpeakTurn[];
   lastScan: ScanRecord | null;
   lastFormat: FormatRecord | null;
-  pendingImage: string | null;
+  pendingImages: string[];
+  scanPreviews: string[];
+  scanBusy: boolean;
+  scanProgress: { done: number; total: number } | null;
   speakDraft: string;
   formatDraft: string;
+  locale: Locale;
   setReady: (ready: boolean) => void;
   setMode: (mode: Mode) => void;
   setLevel: (level: Level) => void;
@@ -89,9 +95,12 @@ type FolioState = {
   setCustomFormat: (customFormat: string) => void;
   setCharacterId: (characterId: CharacterId) => void;
   setDrill: (drill: DrillId) => void;
-  setPendingImage: (dataUrl: string | null) => void;
+  setPendingImages: (dataUrls: string[]) => void;
+  setScanPreviews: (dataUrls: string[]) => void;
+  setScanJob: (job: { busy: boolean; progress: { done: number; total: number } | null }) => void;
   setSpeakDraft: (text: string) => void;
   setFormatDraft: (text: string) => void;
+  setLocale: (locale: Locale) => void;
   addSpeakTurn: (turn: Omit<SpeakTurn, "id" | "createdAt">) => SpeakTurn;
   openSession: (id: string) => void;
   newSpeak: () => void;
@@ -205,9 +214,13 @@ export const useFolio = create<FolioState>()(
       speakTurns: [],
       lastScan: null,
       lastFormat: null,
-      pendingImage: null,
+      pendingImages: [],
+      scanPreviews: [],
+      scanBusy: false,
+      scanProgress: null,
       speakDraft: "",
       formatDraft: "",
+      locale: "ja",
       setReady: (ready) => set({ ready }),
       setMode: (mode) => set({ mode }),
       setLevel: (level) => set({ level }),
@@ -221,9 +234,12 @@ export const useFolio = create<FolioState>()(
       setCustomFormat: (customFormat) => set({ customFormat }),
       setCharacterId: (characterId) => set({ characterId }),
       setDrill: (drill) => set({ drill }),
-      setPendingImage: (pendingImage) => set({ pendingImage }),
+      setPendingImages: (pendingImages) => set({ pendingImages: onlySafeImageUrls(pendingImages) }),
+      setScanPreviews: (scanPreviews) => set({ scanPreviews: onlySafeImageUrls(scanPreviews) }),
+      setScanJob: (job) => set({ scanBusy: job.busy, scanProgress: job.progress }),
       setSpeakDraft: (speakDraft) => set({ speakDraft: speakDraft.slice(0, 4000) }),
       setFormatDraft: (formatDraft) => set({ formatDraft: formatDraft.slice(0, 8000) }),
+      setLocale: (locale) => set({ locale }),
       addSpeakTurn: (turn) => {
         const full: SpeakTurn = { ...turn, id: uid(), createdAt: Date.now() };
         set((s) => {
@@ -303,7 +319,7 @@ export const useFolio = create<FolioState>()(
     }),
     {
       name: "folio-en",
-      version: 10,
+      version: 11,
       skipHydration: true,
       storage: createJSONStorage(() => folioStorage),
       partialize: (s) => ({
@@ -325,8 +341,26 @@ export const useFolio = create<FolioState>()(
         speakTurns: s.speakTurns.slice(-40),
         speakDraft: s.speakDraft.slice(0, 4000),
         formatDraft: s.formatDraft.slice(0, 8000),
-        lastScan: s.lastScan,
-        lastFormat: s.lastFormat,
+        locale: s.locale,
+        lastScan: s.lastScan
+          ? {
+              ...s.lastScan,
+              extracted: s.lastScan.extracted.slice(0, 12000),
+              translationJa: s.lastScan.translationJa.slice(0, 12000),
+              formatted: s.lastScan.formatted.slice(0, 16000),
+              notesJa: s.lastScan.notesJa.slice(0, 4000),
+              cards: (s.lastScan.cards ?? []).slice(0, 64),
+            }
+          : null,
+        lastFormat: s.lastFormat
+          ? {
+              ...s.lastFormat,
+              source: s.lastFormat.source.slice(0, 8000),
+              output: s.lastFormat.output.slice(0, 16000),
+              notesJa: s.lastFormat.notesJa.slice(0, 4000),
+              cards: (s.lastFormat.cards ?? []).slice(0, 64),
+            }
+          : null,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<FolioState>;
@@ -341,7 +375,10 @@ export const useFolio = create<FolioState>()(
           sessionId: typeof p.sessionId === "string" && p.sessionId ? p.sessionId : current.sessionId,
           ready: current.ready,
           mode: current.mode,
-          pendingImage: current.pendingImage,
+          pendingImages: current.pendingImages,
+          scanPreviews: current.scanPreviews,
+          scanBusy: current.scanBusy,
+          scanProgress: current.scanProgress,
         };
       },
       migrate: (persisted) => {
@@ -349,6 +386,7 @@ export const useFolio = create<FolioState>()(
         const next = { ...(persisted as Record<string, unknown>) };
         delete next.mode;
         delete next.pendingImage;
+        delete next.pendingImages;
         delete next.ready;
         if (next.formatId === "vocab") next.formatId = "anki";
         if (!next.characterId) next.characterId = "tutor";
@@ -357,6 +395,7 @@ export const useFolio = create<FolioState>()(
         if (typeof next.sessionId !== "string") next.sessionId = "";
         if (typeof next.speakDraft !== "string") next.speakDraft = "";
         if (typeof next.formatDraft !== "string") next.formatDraft = "";
+        if (!isLocale(next.locale)) next.locale = "ja";
         if (next.ttsEngine !== "grok") next.ttsEngine = "local";
         const paperVoice: Record<string, string> = {
           sumi: "eve",
@@ -378,6 +417,14 @@ export const useFolio = create<FolioState>()(
           next.ttsEngine = "grok";
         } else {
           next.ttsEngine = "grok";
+        }
+        if (next.lastScan && typeof next.lastScan === "object") {
+          const scan = next.lastScan as Record<string, unknown>;
+          scan.cards = parseCards(scan.cards);
+        }
+        if (next.lastFormat && typeof next.lastFormat === "object") {
+          const rec = next.lastFormat as Record<string, unknown>;
+          rec.cards = parseCards(rec.cards);
         }
         const turns = asTurns(next.speakTurns);
         if (turns.length && !(next.sessions as SpeakSession[]).length) {

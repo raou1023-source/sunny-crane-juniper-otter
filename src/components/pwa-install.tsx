@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { t } from "@/lib/i18n";
+import { useFolio } from "@/lib/store";
 
 type PromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -10,7 +12,6 @@ const SKIP_KEY = "folio-pwa-skip";
 function isStandalone() {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
-    window.matchMedia("(display-mode: minimal-ui)").matches ||
     Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
   );
 }
@@ -22,6 +23,11 @@ function isIos() {
 
 function isAndroid() {
   return /Android/i.test(navigator.userAgent);
+}
+
+function isMacSafari() {
+  const ua = navigator.userAgent;
+  return /Macintosh/i.test(ua) && /Safari/i.test(ua) && !/Chrome|Chromium|Edg|Firefox|OPR/i.test(ua);
 }
 
 function inFrame() {
@@ -37,6 +43,7 @@ function readStoredPrompt(): PromptEvent | null {
 }
 
 export function PwaInstall() {
+  const locale = useFolio((s) => s.locale);
   const [standalone, setStandalone] = useState(false);
   const [framed, setFramed] = useState(false);
   const [promptEvent, setPromptEvent] = useState<PromptEvent | null>(null);
@@ -108,7 +115,11 @@ export function PwaInstall() {
       return;
     }
     if (framed) {
-      window.open(window.location.href, "_blank", "noopener,noreferrer");
+      const url = window.location.href;
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.assign(url);
+      }
       setHint(true);
       return;
     }
@@ -117,23 +128,36 @@ export function PwaInstall() {
 
   const android = typeof navigator !== "undefined" && isAndroid();
   const ios = typeof navigator !== "undefined" && isIos();
+  const macSafari = typeof navigator !== "undefined" && isMacSafari();
   const canPrompt = Boolean(promptEvent);
+
+  const lead = framed
+    ? t(locale, "pwaPreview")
+    : ios
+      ? t(locale, "pwaIos")
+      : macSafari
+        ? t(locale, "pwaMac")
+        : t(locale, "pwaGeneric");
+
+  const hintText = ios
+    ? t(locale, "pwaHintIos")
+    : macSafari
+      ? t(locale, "pwaHintMac")
+      : android
+        ? t(locale, "pwaHintAndroid")
+        : t(locale, "pwaHintOther");
 
   return (
     <div className="paper-sheet mb-5 px-4 py-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="min-w-0 flex-1 text-sm leading-relaxed">
-          {framed
-            ? "この画面の中では追加できません。下のボタンで Chrome のタブとして開いてください。"
-            : "ホーム画面に追加すると、次からアプリとして開けます。"}
-        </p>
+        <p className="min-w-0 flex-1 text-sm leading-relaxed">{lead}</p>
         <button
           type="button"
           disabled={busy}
           onClick={() => void install()}
           className="inline-flex h-11 shrink-0 cursor-pointer touch-manipulation items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-45"
         >
-          {busy ? "準備中…" : framed ? "Chromeで開く" : canPrompt ? "インストール" : "ホームに追加"}
+          {busy ? t(locale, "preparing") : framed ? t(locale, "openBrowser") : canPrompt ? t(locale, "install") : t(locale, "howToAdd")}
         </button>
         {framed ? null : (
           <button
@@ -141,18 +165,12 @@ export function PwaInstall() {
             onClick={skip}
             className="inline-flex h-11 shrink-0 cursor-pointer items-center rounded-md px-3 text-sm text-muted-foreground"
           >
-            あとで
+            {t(locale, "later")}
           </button>
         )}
       </div>
-      {hint ? (
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          {ios
-            ? "共有ボタン →「ホーム画面に追加」を押してください。"
-            : android
-              ? "右上「⋮」→「ホーム画面に追加」。次の画面で「インストール」または「追加」を押します。"
-              : "メニューの「アプリをインストール」または「ホーム画面に追加」を選んでください。"}
-        </p>
+      {hint || ios || macSafari ? (
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{hintText}</p>
       ) : null}
     </div>
   );

@@ -11,8 +11,14 @@ const DRILLS = new Set(["talk", "listen"]);
 
 function clip(s: unknown, max: number) {
   return String(s ?? "")
-    .replace(/\u0000/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .slice(0, max);
+}
+
+function clipId(s: unknown) {
+  return String(s ?? "")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 80);
 }
 
 function asTurn(raw: unknown): SpeakTurn | null {
@@ -23,7 +29,7 @@ function asTurn(raw: unknown): SpeakTurn | null {
   if (!role || !english) return null;
   const createdAt = typeof o.createdAt === "number" && Number.isFinite(o.createdAt) ? o.createdAt : Date.now();
   return {
-    id: clip(o.id, 80) || `${createdAt}`,
+    id: clipId(o.id) || `${createdAt}`,
     role,
     english,
     notesJa: o.notesJa ? clip(o.notesJa, 2000) : undefined,
@@ -60,7 +66,7 @@ function asTurn(raw: unknown): SpeakTurn | null {
 function asSession(raw: unknown): SpeakSession | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const id = clip(o.id, 80);
+  const id = clipId(o.id);
   if (!id) return null;
   const scenario = SCENARIO_IDS.has(o.scenario as ScenarioId) ? (o.scenario as ScenarioId) : "daily";
   const characterId = CHARACTER_IDS.has(o.characterId as CharacterId)

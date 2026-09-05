@@ -72,79 +72,79 @@ export const FORMATS: FormatPreset[] = [
   {
     id: "anki",
     label: "AnkiDroid",
-    blurb: "単語／フレーズ・意味・Core Concept・例文5。書き出しの基本形",
+    blurb: "単語／フレーズ・意味・Core Concept（英＋日）・例文5（英＋日）",
     instruction:
-      "Create 8 AnkiDroid cards. Each card: front (word or phrase), Japanese meaning, Core Concept (one English sentence of the idea), and EXACTLY 5 example sentences with the target in **bold**. Preview the cards as markdown. This is the default export shape.",
+      "Create 8 AnkiDroid cards when the source has enough items (do not stop at 5). Each card MUST include: front, meaning in the learner's language, Core Concept in English AND the learner's language (core_ja), a usage note for phrases, and EXACTLY 5 examples each with English (target in **bold**) AND a translation. Never output English-only examples.",
   },
   {
     id: "vocab",
     label: "単語帳",
     blurb: "語・品詞・意味・例文",
     instruction:
-      "Extract 8–12 useful words/phrases. For each: word, part of speech, Japanese meaning, one CEFR-appropriate example sentence, and a short note on collocation if useful. Markdown table.",
+      "Extract 8–12 useful words/phrases. For each: word, part of speech, SUPPORT_LANG meaning, one CEFR-appropriate example sentence, and a short note on collocation if useful. Markdown table.",
   },
   {
     id: "cloze",
     label: "穴埋め",
     blurb: "空所補充 5問",
     instruction:
-      "Make 5 cloze (fill-in-the-blank) questions from the text. Show the gapped sentence, 4 options (A–D), then an answer key with a one-line Japanese explanation.",
+      "Make 5 cloze (fill-in-the-blank) questions from the text. Show the gapped sentence, 4 options (A–D), then an answer key with a one-line SUPPORT_LANG explanation.",
   },
   {
     id: "quiz",
     label: "4択クイズ",
     blurb: "内容理解と語彙",
     instruction:
-      "Make 4 multiple-choice questions (comprehension + vocabulary). Each has 4 options and a Japanese explanation of the correct answer.",
+      "Make 4 multiple-choice questions (comprehension + vocabulary). Each has 4 options and a SUPPORT_LANG explanation of the correct answer.",
   },
   {
     id: "translate-ja",
     label: "和訳",
-    blurb: "自然な日本語訳",
+    blurb: "自然な訳",
     instruction:
-      "Give a natural Japanese translation, then 3 notes on tricky phrases (English → Japanese) with why that rendering was chosen.",
+      "Give a natural SUPPORT_LANG translation, then 3 notes on tricky phrases (English → SUPPORT_LANG) with why that rendering was chosen.",
   },
   {
     id: "translate-en",
     label: "英訳",
     blurb: "自然な英語へ",
     instruction:
-      "If the input is Japanese, translate it into natural English at the learner's CEFR level. Provide a polished version and a slightly simpler version. If the input is already English, rewrite it more naturally and explain changes in Japanese.",
+      "If the input is not English, translate it into natural English at the learner's CEFR level. Provide a polished version and a slightly simpler version. If the input is already English, rewrite it more naturally and explain changes in SUPPORT_LANG.",
   },
   {
     id: "grammar",
     label: "文法解説",
     blurb: "構造と使い方",
     instruction:
-      "Explain the key grammar in Japanese, with diagrams of sentence structure where helpful, 3 additional example sentences, and common mistakes Japanese learners make.",
+      "Explain the key grammar in SUPPORT_LANG, with diagrams of sentence structure where helpful, 3 additional example sentences, and common mistakes learners who use SUPPORT_LANG make.",
   },
   {
     id: "summary",
     label: "要約",
     blurb: "3文＋キーワード",
     instruction:
-      "Summarize in 3 English sentences at the learner's level, then a 1-sentence Japanese summary, then 5 keywords with Japanese glosses.",
+      "Summarize in 3 English sentences at the learner's level, then a 1-sentence SUPPORT_LANG summary, then 5 keywords with SUPPORT_LANG glosses.",
   },
   {
     id: "dialogue",
     label: "対話化",
     blurb: "2人の短い会話",
     instruction:
-      "Rewrite the content as a short 8–12 line dialogue between two people. Keep it speakable. After the dialogue, list 4 useful phrases with Japanese meanings.",
+      "Rewrite the content as a short 8–12 line dialogue between two people. Keep it speakable. After the dialogue, list 4 useful phrases with SUPPORT_LANG meanings.",
   },
   {
     id: "cefr",
     label: "レベル変換",
     blurb: "指定CEFRに書き換え",
     instruction:
-      "Rewrite the English at the requested CEFR level. Show BEFORE (original excerpt) and AFTER. List the main simplifications/enrichments in Japanese.",
+      "Rewrite the English at the requested CEFR level. Show BEFORE (original excerpt) and AFTER. List the main simplifications/enrichments in SUPPORT_LANG.",
   },
   {
     id: "shadow",
     label: "シャドーイング",
     blurb: "音読用スクリプト",
     instruction:
-      "Produce a shadowing script: short breath-sized lines (max ~12 words each), a slower 'practice' paragraph, and IPA or respelling for 5 hard words. Add a 1-minute practice plan in Japanese.",
+      "Produce a shadowing script: short breath-sized lines (max ~12 words each), a slower 'practice' paragraph, and IPA or respelling for 5 hard words. Add a 1-minute practice plan in SUPPORT_LANG.",
   },
   {
     id: "custom",

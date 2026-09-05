@@ -1,5 +1,11 @@
+const ALLOWED_IMAGE = /^image\/(jpeg|jpg|png|webp|gif|heic|heif)$/i;
+const ALLOWED_AUDIO = /^(audio|video)\/(mpeg|mp3|mp4|aac|wav|x-wav|webm|ogg|m4a|x-m4a)$/i;
+
 export async function compressImage(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) {
+  if (/svg|xml|html/i.test(file.type) || /\.svg$/i.test(file.name)) {
+    throw new Error("その画像形式は使えません");
+  }
+  if (file.type && !file.type.startsWith("image/")) {
     throw new Error("画像ファイルを選んでください");
   }
   if (file.size > 8_000_000) {
@@ -22,7 +28,8 @@ export async function compressImage(file: File): Promise<string> {
 }
 
 export function playDataAudio(audio: string, mime: string) {
-  const el = new Audio(`data:${mime};base64,${audio}`);
+  const safeMime = ALLOWED_AUDIO.test(mime) ? mime : "audio/mpeg";
+  const el = new Audio(`data:${safeMime};base64,${audio}`);
   void el.play();
   return el;
 }

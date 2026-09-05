@@ -11,6 +11,7 @@ import { FORMATS, SCENARIOS, type ScenarioId } from "@/lib/formats";
 import { blobToBase64, compressImage } from "@/lib/media";
 import { cancelSpeak, getSpeechRecognition, speakText, startBrowserListen, unlockSpeak } from "@/lib/speech";
 import { useFolio } from "@/lib/store";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 function formatWhen(ts: number) {
@@ -35,7 +36,7 @@ export function SpeakStudio() {
     addSpeakTurn,
     setMode,
     setFormatId,
-    setPendingImage,
+    setPendingImages,
     characterId,
     setCharacterId,
     drill,
@@ -48,6 +49,7 @@ export function SpeakStudio() {
     newSpeak,
     speakDraft,
     setSpeakDraft,
+    locale,
   } = useFolio();
 
   const [busy, setBusy] = useState(false);
@@ -181,6 +183,7 @@ export function SpeakStudio() {
           characterId,
           spoken,
           listen,
+          locale,
         },
       });
       if (!res.ok) {
@@ -207,7 +210,10 @@ export function SpeakStudio() {
     if (busy || recording) return;
     cancelSpeak();
     listenTextRef.current = "";
-    if (getSpeechRecognition()) {
+    const appleMobile =
+      /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (!appleMobile && getSpeechRecognition()) {
       try {
         recApiStop.current = startBrowserListen((text) => {
           listenTextRef.current = text;
@@ -226,21 +232,29 @@ export function SpeakStudio() {
       }
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+          },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       streamRef.current = stream;
       const mime = [
         "audio/mp4",
+        "audio/aac",
+        "audio/x-m4a",
+        "video/mp4",
         "audio/webm;codecs=opus",
         "audio/webm",
         "audio/ogg;codecs=opus",
-      ].find((m) => MediaRecorder.isTypeSupported(m));
+      ].find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m));
       let rec: MediaRecorder;
       try {
         rec = mime
@@ -534,11 +548,11 @@ export function SpeakStudio() {
           disabled={busy || recording || !ready}
           onChange={(e) => setSpeakDraft(e.target.value)}
           onPaste={(e) => {
-            const file = imageFilesFromClipboard(e.clipboardData)[0];
-            if (!file) return;
+            const files = imageFilesFromClipboard(e.clipboardData);
+            if (!files.length) return;
             e.preventDefault();
-            void compressImage(file).then((dataUrl) => {
-              setPendingImage(dataUrl);
+            void Promise.all(files.slice(0, 8).map((file) => compressImage(file))).then((urls) => {
+              setPendingImages(urls);
               setMode("scan");
             });
           }}
@@ -546,8 +560,8 @@ export function SpeakStudio() {
             recording
               ? "話してください…"
               : listen
-                ? "聞こえた内容を書いて送信（または録音）"
-                : "英語（または日本語）を書いて送信"
+                ? t(locale, "speakPhListen")
+                : t(locale, "speakPh")
           }
           className="field h-12 px-3.5 text-base leading-relaxed disabled:opacity-50"
         />

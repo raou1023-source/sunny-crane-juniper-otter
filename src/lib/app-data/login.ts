@@ -12,9 +12,19 @@ function isFramed(): boolean {
   }
 }
 
+function safeHttpUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw, window.location.href);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
 export function redirectToLoginIfRequired(result: CallToolResult): boolean {
   if (!isLoginRequired(result)) return false;
-  const url = result.loginUrl;
+  const url = result.loginUrl ? safeHttpUrl(result.loginUrl) : null;
   if (!url) return false;
   if (typeof window === "undefined") return false;
   if (isFramed()) {

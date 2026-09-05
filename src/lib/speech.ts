@@ -9,12 +9,12 @@ type VoiceStats = Record<string, VoiceStat>;
 const STATS_KEY = "folio-voice-stats";
 
 const HINTS: Record<VoiceId, { prefer: string[]; gender: "f" | "m" }> = {
-  eve: { prefer: ["samantha", "google us english", "microsoft aria", "jenny", "aria online"], gender: "f" },
-  luna: { prefer: ["karen", "moira", "google uk english female", "libby", "sonia"], gender: "f" },
-  orion: { prefer: ["daniel", "google uk english male", "george", "ryan", "microsoft guy"], gender: "m" },
-  liora: { prefer: ["samantha", "karen", "zira", "google us english", "jenny"], gender: "f" },
-  atlas: { prefer: ["alex", "david", "google us english", "mark", "microsoft david"], gender: "m" },
-  helix: { prefer: ["daniel", "google uk english", "tom", "rishi", "arthur"], gender: "m" },
+  eve: { prefer: ["samantha", "nicky", "siri", "google us english", "microsoft aria", "jenny", "aria online"], gender: "f" },
+  luna: { prefer: ["karen", "moira", "fiona", "tessa", "google uk english female", "libby", "sonia"], gender: "f" },
+  orion: { prefer: ["daniel", "reed", "google uk english male", "george", "ryan", "microsoft guy"], gender: "m" },
+  liora: { prefer: ["samantha", "karen", "nicky", "zira", "google us english", "jenny"], gender: "f" },
+  atlas: { prefer: ["alex", "fred", "aaron", "david", "google us english", "mark", "microsoft david"], gender: "m" },
+  helix: { prefer: ["daniel", "reed", "google uk english", "tom", "rishi", "arthur"], gender: "m" },
 };
 
 const PREMIUM = /neural|premium|enhanced|natural|wavenet|studio|online \(natural\)|multilingual/i;
@@ -100,16 +100,16 @@ function waitVoices(): Promise<SpeechSynthesisVoice[]> {
   return new Promise((resolve) => {
     const done = () => resolve(syn.getVoices());
     syn.addEventListener("voiceschanged", done, { once: true });
-    window.setTimeout(done, 900);
+    window.setTimeout(done, 1800);
   });
 }
 
 function genderHint(name: string): "f" | "m" | "?" {
   const n = name.toLowerCase();
-  if (/\b(female|woman|girl|samantha|karen|moira|zira|aria|jenny|samantha|libby|sonia|fiona|veena|tessa)\b/.test(n)) {
+  if (/\b(female|woman|girl|samantha|karen|moira|zira|aria|jenny|libby|sonia|fiona|veena|tessa|nicky|siri)\b/.test(n)) {
     return "f";
   }
-  if (/\b(male|man|daniel|david|george|alex|mark|ryan|rishi|arthur|guy|tom)\b/.test(n)) return "m";
+  if (/\b(male|man|daniel|david|george|alex|fred|aaron|reed|mark|ryan|rishi|arthur|guy|tom)\b/.test(n)) return "m";
   return "?";
 }
 
@@ -186,9 +186,14 @@ function speakOne(
     utter.volume = 1;
     if (voice) utter.voice = voice;
     currentUtter = utter;
+    try {
+      if (syn.paused) syn.resume();
+    } catch {
+      /* ignore */
+    }
     const failTimer = window.setTimeout(() => {
       reject(new Error("timeout"));
-    }, Math.max(8000, text.length * 90));
+    }, Math.max(12000, text.length * 110));
     utter.onend = () => {
       window.clearTimeout(failTimer);
       if (currentUtter === utter) currentUtter = null;

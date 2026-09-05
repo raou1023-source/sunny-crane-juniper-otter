@@ -13,3 +13,31 @@ export function imageFilesFromClipboard(data: DataTransfer | null | undefined): 
   }
   return out;
 }
+
+export async function copyText(text: string): Promise<boolean> {
+  const value = String(text ?? "");
+  if (!value.trim()) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    /* fallback below */
+  }
+  const ta = document.createElement("textarea");
+  ta.value = value;
+  ta.setAttribute("readonly", "");
+  ta.setAttribute("aria-hidden", "true");
+  ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  ta.remove();
+  return ok;
+}

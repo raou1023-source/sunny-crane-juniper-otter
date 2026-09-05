@@ -1,19 +1,21 @@
 {
-  "name": "英会話アプリ",
-  "short_name": "英会話",
+  "name": "Conversation",
+  "short_name": "Conversation",
   "description": "紙の上で、英語を書く。会話、画像の読み取り、AnkiDroid への書き出し。",
-  "id": "/eikaiwa",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "lang": "ja",
   "dir": "ltr",
   "background_color": "#e4d7c3",
   "theme_color": "#e4d7c3",
+  "prefer_related_applications": false,
+  "categories": ["education"],
   "icons": [
+    { "src": "/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

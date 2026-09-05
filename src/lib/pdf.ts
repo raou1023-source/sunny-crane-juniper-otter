@@ -1,21 +1,10 @@
-import type { AnkiCard } from "@/lib/anki";
+import { filledExamples, isolateCards, type AnkiCard } from "@/lib/anki";
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, max: number) {
-  const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
-  let cur = "";
-  for (const w of words) {
-    const next = cur ? `${cur} ${w}` : w;
-    if (ctx.measureText(next).width <= max) cur = next;
-    else {
-      if (cur) lines.push(cur);
-      cur = w;
-    }
-  }
-  if (cur) lines.push(cur);
-  if (!lines.length && text) {
+  const pushChars = (s: string) => {
     let buf = "";
-    for (const ch of text) {
+    for (const ch of s) {
       const next = buf + ch;
       if (ctx.measureText(next).width <= max) buf = next;
       else {
@@ -24,7 +13,26 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, max: number) {
       }
     }
     if (buf) lines.push(buf);
+  };
+  const words = text.split(/\s+/).filter(Boolean);
+  let cur = "";
+  for (const w of words) {
+    if (ctx.measureText(w).width > max) {
+      if (cur) {
+        lines.push(cur);
+        cur = "";
+      }
+      pushChars(w);
+      continue;
+    }
+    const next = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(next).width <= max) cur = next;
+    else {
+      if (cur) lines.push(cur);
+      cur = w;
+    }
   }
+  if (cur) lines.push(cur);
   return lines;
 }
 
@@ -45,7 +53,7 @@ function drawCard(
   cy += 8;
   ctx.font = "500 22px 'IBM Plex Sans JP', sans-serif";
   ctx.fillStyle = "#6e675c";
-  ctx.fillText("意味", x, cy);
+  ctx.fillText("Meaning", x, cy);
   cy += 32;
   ctx.fillStyle = "#1c1915";
   ctx.font = "400 26px 'IBM Plex Sans JP', sans-serif";
@@ -64,24 +72,54 @@ function drawCard(
     ctx.fillText(line, x, cy);
     cy += 34;
   }
+  if (card.coreJa) {
+    ctx.fillStyle = "#6e675c";
+    ctx.font = "400 22px 'IBM Plex Sans JP', sans-serif";
+    for (const line of wrap(ctx, card.coreJa, w)) {
+      ctx.fillText(line, x, cy);
+      cy += 30;
+    }
+  }
+  if (card.note) {
+    cy += 10;
+    ctx.fillStyle = "#6e675c";
+    ctx.font = "500 22px 'IBM Plex Sans JP', sans-serif";
+    ctx.fillText("Usage", x, cy);
+    cy += 32;
+    ctx.fillStyle = "#1c1915";
+    ctx.font = "400 24px 'IBM Plex Sans JP', sans-serif";
+    for (const line of wrap(ctx, card.note, w)) {
+      ctx.fillText(line, x, cy);
+      cy += 32;
+    }
+  }
   cy += 12;
   ctx.fillStyle = "#6e675c";
   ctx.font = "500 22px 'IBM Plex Sans JP', sans-serif";
-  ctx.fillText("例文", x, cy);
+  ctx.fillText("Examples", x, cy);
   cy += 34;
-  ctx.fillStyle = "#1c1915";
-  ctx.font = "400 24px 'IBM Plex Sans JP', sans-serif";
-  card.examples.filter(Boolean).forEach((ex, i) => {
-    const body = ex.replace(/\*\*/g, "");
+  filledExamples(card).forEach((ex, i) => {
+    ctx.fillStyle = "#1c1915";
+    ctx.font = "400 24px 'IBM Plex Sans JP', sans-serif";
+    const body = ex.en.replace(/\*\*/g, "");
     const lines = wrap(ctx, `${i + 1}. ${body}`, w);
     for (const line of lines) {
       ctx.fillText(line, x, cy);
       cy += 32;
     }
-    cy += 6;
+    if (ex.ja) {
+      ctx.fillStyle = "#6e675c";
+      ctx.font = "400 20px 'IBM Plex Sans JP', sans-serif";
+      for (const line of wrap(ctx, ex.ja, w - 16)) {
+        ctx.fillText(line, x + 16, cy);
+        cy += 28;
+      }
+    }
+    cy += 8;
   });
   return cy;
 }
+
 
 function jpegOfCanvas(canvas: HTMLCanvasElement) {
   const dataUrl = canvas.toDataURL("image/jpeg", 0.84);
@@ -202,12 +240,13 @@ function buildPdf(images: { bytes: Uint8Array; w: number; h: number }[]) {
 }
 
 export async function cardsToPdfBlob(cards: AnkiCard[]): Promise<Blob> {
+  const isolated = isolateCards(cards);
   await document.fonts.ready.catch(() => undefined);
   const W = 1190;
   const H = 1684;
   const pages: { bytes: Uint8Array; w: number; h: number }[] = [];
   const per = 2;
-  for (let i = 0; i < cards.length; i += per) {
+  for (let i = 0; i < isolated.length; i += per) {
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
@@ -217,9 +256,9 @@ export async function cardsToPdfBlob(cards: AnkiCard[]): Promise<Blob> {
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "#2c4a42";
     ctx.font = "500 22px 'IBM Plex Sans JP', sans-serif";
-    ctx.fillText("英会話アプリ  ·  AnkiDroid", 64, 56);
+    ctx.fillText("Conversation  ·  AnkiDroid", 64, 56);
     let y = 110;
-    const slice = cards.slice(i, i + per);
+    const slice = isolated.slice(i, i + per);
     for (const card of slice) {
       y = drawCard(ctx, card, 64, y, W - 128) + 48;
     }
@@ -235,7 +274,7 @@ export async function cardsToPdfBlob(cards: AnkiCard[]): Promise<Blob> {
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "#1c1915";
     ctx.font = "600 40px Fraunces, serif";
-    ctx.fillText("英会話アプリ", 64, 120);
+    ctx.fillText("Conversation", 64, 120);
     pages.push({ bytes: jpegOfCanvas(canvas), w: W, h: H });
   }
   return buildPdf(pages);

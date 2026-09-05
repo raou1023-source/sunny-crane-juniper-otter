@@ -11,6 +11,7 @@ import { formatText } from "@/lib/ai";
 import { SAMPLE_ENGLISH } from "@/lib/formats";
 import { speakText, unlockSpeak } from "@/lib/speech";
 import { useFolio } from "@/lib/store";
+import { t } from "@/lib/i18n";
 
 export function FormatStudio() {
   const {
@@ -26,6 +27,7 @@ export function FormatStudio() {
     ttsEngine,
     formatDraft,
     setFormatDraft,
+    locale,
   } = useFolio();
   const [source, setSource] = useState(lastFormat?.source || formatDraft || "");
   const [busy, setBusy] = useState(false);
@@ -46,7 +48,7 @@ export function FormatStudio() {
     setBusy(true);
     try {
       const res = await formatText({
-        data: { source: trimmed, level, formatId, customFormat },
+        data: { source: trimmed, level, formatId, customFormat, locale },
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -108,7 +110,7 @@ export function FormatStudio() {
                 setSource(e.target.value);
                 setFormatDraft(e.target.value);
               }}
-              placeholder="英文、日本語、教科書の一節。自由指定なら、出力してほしい形もここに／上の欄に書く"
+              placeholder={t(locale, "formatPh")}
               className="min-h-48 flex-1"
             />
             <label className="flex flex-col gap-1" htmlFor="format-go">

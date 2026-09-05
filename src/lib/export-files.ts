@@ -1,6 +1,7 @@
-import { type AnkiCard, cardBackHtml, cleanField, csvField, toReadableText } from "@/lib/anki";
+import { type AnkiCard, cardBackHtml, cleanField, csvField, isolateCards, toReadableText } from "@/lib/anki";
 
-export function toAnkiDroidCsv(cards: AnkiCard[], deck = "英会話アプリ"): string {
+export function toAnkiDroidCsv(cards: AnkiCard[], deck = "Conversation"): string {
+  const isolated = isolateCards(cards);
   const header = [
     "#separator:comma",
     "#html:true",
@@ -8,33 +9,43 @@ export function toAnkiDroidCsv(cards: AnkiCard[], deck = "英会話アプリ"): 
     "#notetype:Basic",
     "#columns:Front,Back",
   ].join("\n");
-  const rows = cards.map((c) => `${csvField(cleanField(c.front))},${csvField(cardBackHtml(c))}`);
+  const rows = isolated.map((c) => {
+    const front = cleanField(c.front);
+    const back = cardBackHtml(c).replace(/\r?\n/g, "");
+    return `${csvField(front)},${csvField(back)}`;
+  });
   return `\uFEFF${header}\n${rows.join("\n")}\n`;
 }
 
 export function toSheetCsv(cards: AnkiCard[]): string {
+  const isolated = isolateCards(cards);
   const head = [
     "Front",
     "Meaning",
     "Core Concept",
+    "Core Concept JA",
+    "Usage",
     "Example1",
+    "Example1 JA",
     "Example2",
+    "Example2 JA",
     "Example3",
+    "Example3 JA",
     "Example4",
+    "Example4 JA",
     "Example5",
+    "Example5 JA",
   ]
     .map(csvField)
     .join(",");
-  const rows = cards.map((c) =>
+  const rows = isolated.map((c) =>
     [
       c.front,
       c.meaning,
       c.core,
-      c.examples[0] ?? "",
-      c.examples[1] ?? "",
-      c.examples[2] ?? "",
-      c.examples[3] ?? "",
-      c.examples[4] ?? "",
+      c.coreJa,
+      c.note,
+      ...c.examples.flatMap((e) => [e.en, e.ja]),
     ]
       .map((v) => csvField(cleanField(v)))
       .join(","),
@@ -51,30 +62,36 @@ function xmlEsc(s: string) {
 }
 
 export function toExcelXml(cards: AnkiCard[]): string {
+  const isolated = isolateCards(cards);
   const cols = [
     "Front",
     "Meaning",
     "Core Concept",
+    "Core Concept JA",
+    "Usage",
     "Example1",
+    "Example1 JA",
     "Example2",
+    "Example2 JA",
     "Example3",
+    "Example3 JA",
     "Example4",
+    "Example4 JA",
     "Example5",
+    "Example5 JA",
   ];
   const headerRow = cols
     .map((c) => `<Cell><Data ss:Type="String">${xmlEsc(c)}</Data></Cell>`)
     .join("");
-  const body = cards
+  const body = isolated
     .map((card) => {
       const vals = [
         card.front,
         card.meaning,
         card.core,
-        card.examples[0] ?? "",
-        card.examples[1] ?? "",
-        card.examples[2] ?? "",
-        card.examples[3] ?? "",
-        card.examples[4] ?? "",
+        card.coreJa,
+        card.note,
+        ...card.examples.flatMap((e) => [e.en, e.ja]),
       ];
       return `<Row>${vals
         .map((v) => `<Cell><Data ss:Type="String">${xmlEsc(v)}</Data></Cell>`)
@@ -132,6 +149,6 @@ export const EXPORT_KINDS: { id: ExportKind; label: string }[] = [
 export function textForKind(kind: ExportKind, cards: AnkiCard[], fallback = "") {
   if (!cards.length) return fallback;
   if (kind === "excel") return toSheetCsv(cards);
-  if (kind === "text") return toReadableText(cards);
+  if (kind === "text" || kind === "pdf") return toReadableText(cards);
   return toAnkiDroidCsv(cards);
 }
